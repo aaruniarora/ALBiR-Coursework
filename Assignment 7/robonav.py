@@ -522,4 +522,4 @@ if __name__ == "__main__":
     # robot.move_check(0.1)
 
     ## scan_bias=0.7 means 70% chance for 1 (right), 30% chance for -1 (left)
-    robot.maze_solver(speed=0.1, stop_dist=8)
+    robot.maze_solver(speed=0.1, scan_bias=0.5, stop_dist=8)
