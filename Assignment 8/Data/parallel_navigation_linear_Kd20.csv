@@ -1,0 +1,6 @@
+Run,Strategy,TimeToCapture_s,PathLength_cm,StartDistance_cm,Success
+1,parallel_navigation,5.07,506.67,650.79,True
+2,parallel_navigation,1.32,131.67,164.44,True
+3,parallel_navigation,4.87,486.67,616.02,True
+4,parallel_navigation,3.6,360.0,203.02,True
+5,parallel_navigation,6.57,656.67,618.86,True

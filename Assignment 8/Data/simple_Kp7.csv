@@ -1,0 +1,6 @@
+Run,Strategy,TimeToCapture_s,PathLength_cm,StartDistance_cm,Success
+1,simple,18.05,1805.0,200.0,True
+2,simple,16.6,1660.0,350.0,True
+3,simple,8.42,841.67,583.1,True
+4,simple,13.77,1376.67,602.08,True
+5,simple,20.88,2088.33,400.0,True

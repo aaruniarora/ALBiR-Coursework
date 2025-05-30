@@ -104,7 +104,7 @@ class Agent:
             if self.last_theta_r is not None:
                 d_theta_r = (theta_r - self.last_theta_r) / dt
                 d_theta_r = (d_theta_r + math.pi) % (2 * math.pi) - math.pi
-                self.heading += -self.Kp * d_theta_r * dt 
+                self.heading += self.Kd * d_theta_r * dt 
             self.last_theta_r = theta_r
             self.theta_r_log.append(theta_r)  
 
@@ -180,7 +180,7 @@ def run_single_simulation(strat, agent_start=(100, 300), target_start=(300, 300)
 
     target = Target(*target_start, speed=70, wave_amplitude=60, wave_length=120, mode=target_path)
 
-    capture_radius = 10
+    capture_radius = 15
     t = 0
     time_to_capture = None
     running = True
@@ -243,8 +243,8 @@ def run_single_simulation(strat, agent_start=(100, 300), target_start=(300, 300)
     print(f"Strategy: {strat} | Time to capture: {time_to_capture}s | Success: {success}")
 
     return {
-        "agent_traj": agent.trajectory,
-        "target_traj": target.trajectory,
+        # "agent_traj": agent.trajectory,
+        # "target_traj": target.trajectory,
         "time_to_capture": time_to_capture,
         "agent_start": agent_start,
         "target_start": target_start,
@@ -269,124 +269,6 @@ def run_batch_simulations(strat, scenarios, visual=False, frame_delay=0, theta_C
         results.append(result)
         print(f"Run {i+1} | Time to capture: {result['time_to_capture']}s | Success: {result['success']}")
     return results
-
-def plot_metric_vs_param(metrics, param_key, title=None, save=False, name=''):
-    if name:
-        name = f"_{name}"
-
-    grouped = defaultdict(lambda: {"times": [], "paths": []})
-    print(metrics)
-
-    for m in metrics:
-        key = m[param_key]
-        if m["success"] and m["time_to_capture"] is not None and m["time_to_capture"] > 0:
-            grouped[key]["times"].append(m["time_to_capture"])
-            grouped[key]["paths"].append(m["path_length"])
-
-    keys = sorted(grouped.keys())
-    print(grouped)
-    avg_times = [np.mean(grouped[k]["times"]) for k in keys]
-    avg_paths = [np.mean(grouped[k]["paths"]) for k in keys]
-
-    fig, ax1 = plt.subplots(figsize=(10, 6))
-
-    color1 = 'tab:blue'
-    color2 = 'tab:orange'
-
-    print(avg_times)
-    print(avg_paths)
-
-    ax1.set_xlabel(param_key)
-    ax1.set_ylabel("Avg Time to Capture (s)", color=color1)
-    ax1.plot(keys, avg_times, color=color1, marker='o', linewidth=2, label="Time Taken")
-    ax1.tick_params(axis='y', labelcolor=color1)
-    ax1.set_ylim(min(avg_times) * 0.9, max(avg_times) * 1.1)
-
-    ax2 = ax1.twinx()
-    ax2.set_ylabel("Avg Path Length (cm)", color=color2)
-    ax2.plot(keys, avg_paths, color=color2, marker='s', linewidth=2, label="Path Length")
-    ax2.tick_params(axis='y', labelcolor=color2)
-    ax2.set_ylim(min(avg_paths) * 0.9, max(avg_paths) * 1.1)
-
-    plt.title(title or f"Metric vs {param_key}")
-    fig.tight_layout()
-    plt.grid(True)
-
-    if save:
-        plt.savefig(f"{param_key}_vs_metrics{name}.pdf", dpi=300)
-
-    plt.show()
-
-def compare_strategies(strategies, scenario, target_path='sine', frame_delay=0):
-    results = []
-    for strat in strategies:
-        result = run_single_simulation(strat, agent_start=scenario[0], target_start=scenario[1],
-                                       visualize=False, frame_delay=frame_delay, target_path=target_path)
-        result['strategy'] = strat
-        results.append(result)
-    
-    for res in results:
-        print(f"{res['strategy']}: Time to capture = {res['time_to_capture']:.2f}s | "
-              f"Success = {res['success']}")
-
-def evaluate_pid_grid(strategy, kp_vals, ki_vals, kd_vals,
-                      agent_start=(100, 300), target_start=(300, 300),
-                      frame_delay=0, target_path="sinusoidal", noise_std=0):
-    metrics = []
-
-    for kp, ki, kd in product(kp_vals, ki_vals, kd_vals):
-        print(f"Testing Kp={kp}, Ki={ki}, Kd={kd}")
-        agent_kwargs = {"Kp": kp, "Ki": ki, "Kd": kd}
-
-        result = run_single_simulation(strategy,
-                                        agent_start=agent_start,
-                                        target_start=target_start,
-                                        visualize=False,
-                                        frame_delay=frame_delay,
-                                        target_path=target_path,
-                                        agent_kwargs=agent_kwargs
-                                    )
-
-
-        traj = result["agent_traj"]
-        path_length = sum(
-            math.hypot(traj[i][0] - traj[i - 1][0], traj[i][1] - traj[i - 1][1])
-            for i in range(1, len(traj))
-        )
-
-        metrics.append({
-            "Kp": kp,
-            "Ki": ki,
-            "Kd": kd,
-            "time_to_capture": result["time_to_capture"],
-            "success": result["success"],
-            "path_length": path_length
-        })
-
-    return metrics
-
-def plot_eval_metrics(metrics, x_key="Kp", ylabel="Time to Capture (s)", metric_key="time_to_capture", title="Evaluation Plot"):
-    x = [m[x_key] for m in metrics]
-    y = [m[metric_key] if m["success"] else None for m in metrics]
-
-    plt.figure(figsize=(8, 6))
-    plt.plot(x, y, 'o-', label=metric_key)
-    plt.title(title)
-    plt.xlabel("Parameter Value")
-    plt.ylabel(ylabel)
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
-
-def plot_theta_r(results, run_index=0):
-    thetas = results[run_index]["theta_r_log"]
-    t = np.arange(len(thetas)) / FPS
-    plt.plot(t, np.degrees(thetas))
-    plt.title("Target Bearing θr over Time (Parallel Navigation)")
-    plt.xlabel("Time (s)")
-    plt.ylabel("θr (degrees)")
-    plt.grid(True)
-    plt.show()
 
 def plot_motion_camouflage_lines(result):
     agent_traj = np.array(result["agent_traj"])
@@ -449,7 +331,7 @@ def plot_all_trajectories(results, name="trial", save=False, show=True):
             plt.scatter(*final, color=color, marker='^', s=80, label=f"Timeout {i+1}")
 
 
-    plt.title("Multi-Scenario Pursuit Trajectories")
+    # plt.title("Multi-Scenario Pursuit Trajectories")
     plt.xlabel("X")
     plt.ylabel("Y")
     plt.axis("equal")
@@ -526,108 +408,71 @@ if __name__ == "__main__":
         ((random.randint(0, 800), random.randint(0, 600)),
         (random.randint(0, 800), random.randint(0, 600)))
 
-        for i in range(1)
+        for i in range(5)
     ]
-    print(scenarios)
 
     # "simple", "constant_bearing", "proportional_navigation", "parallel_navigation", "motion_camouflage"
     # x, y, speed, strategy="simple", theta_set_deg=30, Kp=2.0, Ki=0.5, Kd=4, camouflage_point=(0, 0), **kwargs
     # strategy = "simple"  
 
-    ########## Compairing different simple params - Kp, Ki, DELAY ##########
-    strategy = "constant_bearing"
-
-    # for k in [0, 1, 2, 3, 5, 7, 10, 15, 20, 30, 40, 50, 60, 70, 80, 90, 100]:
-    #     print('Kp:', k)
-    #     results = run_batch_simulations(strategy, scenarios, visual=False, frame_delay=0,
-    #                                     Kp=k, Ki=0, Kd=0,
-    #                                     target_path="sinusoidal", duration=60, theta_CB=30)
-    #     save_results_to_csv(results, filename=f'simple_Kp{k}.csv')
-    #     plot_all_trajectories(results, name=f"{strategy}_Kp{k}", save=True, show=False)
+    ########## Compairing different params - Kp, Ki, DELAY ##########
+    strategy = "simple"    
     
+    params = [0.8, 1, 2, 5, 10, 15, 20, 40, 60, 80, 100] # kp - 15
+    # params = [2, 5, 10, 20, 30, 40, 50, 60] # theta_cb - 2/50
+    # params = [0.8, 1, 2, 3, 4, 5, 7, 10, 15, 20] # kd - 10
+    # params = [0.5, 1, 2, 5, 7, 10, 15, 20] # motion camouflage kp - 7
+
     all_times = []
-    # params = [0.8, 1, 2, 5, 10, 15, 20, 40, 60, 80, 100] # kp
-    # params = [2, 5, 10, 20, 50, 70]
-    params = [70]
-    # for strat in ["simple", "constant_bearing", "parallel_navigation", "proportional_navigation"]
     for tpath in ["sinusoidal", "linear"]:
-        # all_metrics = []
         time_taken = []
         for k in params:
-            # print('Kp:', k)
-            print('bearing angle:', k)
             results = run_batch_simulations(strategy, scenarios, visual=False, frame_delay=0,
-                                            Kp=15, Ki=0, Kd=0,
-                                            target_path=tpath, duration=60, theta_CB=k)
+                                            Kp=k, Ki=0, Kd=0,
+                                            target_path=tpath, duration=60, theta_CB=50)
             
-            # Append relevant metric info for plotting
-            time_taken.append(results[0]["time_to_capture"])
+            time_to_captureS = [item["time_to_capture"] for item in results]
+            mean_time = np.mean(time_to_captureS)
+            print(mean_time)
+            time_taken.append(mean_time)
             # save_results_to_csv(results, filename=f'{strategy}_Kp{k}.csv')
             # plot_all_trajectories(results, name=f"{strategy}_Kp{k}", save=True, show=False)
         all_times.append(time_taken)
-    plot_sine_line(all_times, params, x_label="Angle (degrees)", save=False, name="constant_bearing_tuning")
     
-    # plt.boxplot()
+    print(all_times, time_taken, mean_time)
+    plot_sine_line(all_times, params, x_label="Angle (degrees)", save=True, name="simple_tuning")
 
+    ########################### BOXPLOT #########################################
+
+    # all_strats = ["simple", "constant_bearing", "parallel_navigation", "motion_camouflage"]
+    # final_results = {st: [] for st in all_strats}  
+    # for strat in ["simple", "constant_bearing", "parallel_navigation", "motion_camouflage"]:
+    #     # all_times = []
+    #     for tpath in ["linear"]:
+    #         results = run_batch_simulations(strat, scenarios, visual=False, frame_delay=50,
+    #                                         Kp=7 if strat=="motion camouflage" else 15,
+    #                                         Ki=0, 
+    #                                         Kd=10 if strat=="parallel_navigation" else 0,
+    #                                         target_path=tpath, duration=60, 
+    #                                         theta_CB=40 if tpath == "sinusoidal" else 2)
+    #         time_to_captureS = [item["time_to_capture"] for item in results]
+           
+    #     final_results[strat].extend(time_to_captureS)
+    # # plot_sine_line(all_times, params, x_label="Kp", save=False, name="motion_camouflage_tuning")
     
-
-    # for k in [0, 1, 2, 3, 5, 7, 10, 15, 20, 30, 40, 50, 60, 70, 80, 90, 100]:
-    #     print('Ki:', k)
-    #     results = run_batch_simulations(strategy, scenarios, visual=False, frame_delay=0,
-    #                                     Kp=2, Ki=k, Kd=0,
-    #                                     target_path="sinusoidal", duration=60, theta_CB=30)
-    #     save_results_to_csv(results, filename=f'{strategy}_Ki{k}.csv')
-    #     plot_all_trajectories(results, name=f"{strategy}_Ki{k}", save=True, show=False)
-    
-    # plot_metric_vs_param(all_metrics, param_key="Ki", title="Performance vs Ki", save=True, name="try")
-
-    # for i in [0, 10, 20, 30, 40, 50]:
-    #     print('Delay:', i)
-    #     results = run_batch_simulations(strategy, scenarios, visual=False, frame_delay=i, Kp=2, Ki=0, Kd=0,
-    #                                     target_path="sinusoidal", duration=60, theta_CB=30)
-    #     save_results_to_csv(results, filename=f'simple_delay{i}.csv')
-    #     plot_all_trajectories(results, name=f"{strategy}_delay{i}", save=True, show=False)
-
-    ########## Compairing different CB params ##########
-    # strategy = "constant_bearing"
-
-    # for cb in [0, 0.01, 0.05, 0.1, 0.5, 1, 5, 10]:
-    #     print('Ki:', cb)
-    #     results = run_batch_simulations(strategy, scenarios, visual=False, frame_delay=0,
-    #                                     Kp=2.0, Ki=cb, Kd=0,
-    #                                     target_path="sinusoidal", duration=60, theta_CB=30)
-    #     save_results_to_csv(results, filename=f'cb_ki{cb}.csv')
-    #     plot_all_trajectories(results, name=f"{strategy}_ki{cb}", save=True, show=False)
-
-    # for cb in [-100, -50, -30, -15, 0, 15, 30, 50, 100]:
-    #     print('CB:', cb)
-    #     results = run_batch_simulations(strategy, scenarios, visual=False, frame_delay=0,
-    #                                     Kp=2.0, Ki=0.5, Kd=4,
-    #                                     target_path="sinusoidal", duration=60, theta_CB=cb)
-    #     save_results_to_csv(results, filename=f'cb_theta{cb}.csv')
-    #     plot_all_trajectories(results, name=f"{strategy}_theta{cb}", save=True, show=False)
-
-
-    ########## Extras ##########
-    # # Run one simulation
-    # result = run_single_simulation(strategy, agent_start=(100, 700), target_start=(300, 200), visualize=True)
-    # plot_motion_camouflage_lines(result)
-
-    # kp_vals = [0, 1, 2, 3, 5, 7, 10, 15, 20]
-    # ki_vals = [0, 0, 0, 0, 0, 0, 0, 0, 0]
-    # kd_vals = [0, 0, 0, 0, 0, 0, 0, 0, 0]
-
-    # strategy = "simple"
-    # metric_key = "time_to_capture" # "" "time_to_capture", "path_length", "success"
-    # # metrics = evaluate_params(strategy, "Kp", kp_vals)
-    # metrics = evaluate_pid_grid(strategy, kp_vals, ki_vals, kd_vals,
-    #                   agent_start=(100, 300), target_start=(300, 300),
-    #                   frame_delay=0, target_path="sinusoidal", noise_std=0)
-    
-    # filtered = [m for m in metrics if m["Ki"] == 0 and m["Kd"] == 0]
-    # plot_eval_metrics(filtered, title="Time vs Kp @ Ki=0.5, Kd=3")
-    # plot_eval_metrics(metrics, ylabel="Time to Capture (s)", metric_key=metric_key, title="Simple Pursuit: Kp Sweep")
+    # data = list(final_results.values())
+    # labels = list(final_results.keys())
+    # means = [np.mean(sub_data) for sub_data in data]
+    # print('here')
+    # print(final_results)
+    # print(data)
+    # box = plt.boxplot(data, labels=labels, patch_artist=True)
+    # for patch in box['boxes']:
+    #     patch.set_facecolor('green')
+    # plt.xticks([1, 2, 3, 4], ["Simple\nPursuit", "Constant\nBearing", "Parallel\nNavigation", "Motion\nCamouflage"])
+    # plt.plot(range(1, 5), means, '--*', color='black')
+    # plt.ylabel('Mean Time Taken to Capture (s)')
+    # plt.savefig("summary_boxplot_linear_delay50.pdf", dpi=300)
+    # plt.show()
 
     
-    
-
